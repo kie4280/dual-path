@@ -21,8 +21,8 @@ import torch.distributed as dist
 from timm.data import Mixup
 from timm.utils import accuracy
 
-import utils.misc as misc
-import utils.lr_sched as lr_sched
+import util.misc as misc
+import util.lr_sched as lr_sched
 from torchvision import transforms
 import cv2
 from PIL import Image
