@@ -5,7 +5,7 @@ def get_args_parser():
   parser = argparse.ArgumentParser(
       'AdaptFormer fine-tuning for action recognition',
       add_help=False)
-  parser.add_argument('--batch_size', default=512, type=int,
+  parser.add_argument('--batch_size', default=128, type=int,
                       help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')
   parser.add_argument('--epochs', default=200, type=int)
   parser.add_argument('--accum_iter', default=1, type=int,
@@ -37,14 +37,14 @@ def get_args_parser():
                       help='Use class token instead of global pool for classification')
 
   # Dataset parameters
-  parser.add_argument('--data_path', default='../../Dataset/02_Diving48', type=str,
+  parser.add_argument('--data_path', default='../kinetics-dataset/k400', type=str,
                       help='dataset path')
   parser.add_argument('--nb_classes', default=174, type=int,
                       help='number of the classification types')
 
   parser.add_argument('--output_dir', default='./output_dir',
                       help='path where to save, empty for no saving')
-  parser.add_argument('--log_dir', default=None,
+  parser.add_argument('--log_dir', default="./output_dir",
                       help='path where to tensorboard log')
   parser.add_argument('--device', default='cuda',
                       help='device to use for training / testing')
@@ -84,9 +84,10 @@ def get_args_parser():
                       help='No drop path for linear probe')
   parser.add_argument('--use_mean_pooling', default=True)
   parser.add_argument('--init_scale', default=0.001, type=float)
+  parser.add_argument("-v", "--verbose", action="store_true")
 
   # video data parameters
-  parser.add_argument('--data_set', default='HMDB51',
+  parser.add_argument('--data_set', default='K400',
                       choices=[
                           'SSV2',
                           'HMDB51',

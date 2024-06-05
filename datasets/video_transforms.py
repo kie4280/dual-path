@@ -289,7 +289,7 @@ def blend(images1, images2, alpha):
     return images1 * alpha + images2 * (1 - alpha)
 
 
-def grayscale(prob, images):
+def grayscale(prob, images:torch.Tensor):
     """
     Get the grayscale for the input images. The channels of images should be
     in order BGR.
@@ -302,7 +302,7 @@ def grayscale(prob, images):
     """
     # R -> 0.299, G -> 0.587, B -> 0.114.
     if np.random.uniform() < prob:
-        img_gray = torch.tensor(images)
+        img_gray = images.clone().detach()
         gray_channel = (
             0.299 * images[:, 2] + 0.587 * images[:, 1] + 0.114 * images[:, 0]
         )

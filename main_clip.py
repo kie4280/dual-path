@@ -13,7 +13,6 @@
 # --data_path '../Dataset/01_SSv2' --output_dir './output_dir_SSv2'
 # --resume './output_dir_SSv2/checkpoint-10.pth'
 
-import argparse
 import datetime
 import json
 import numpy as np
@@ -29,6 +28,10 @@ import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from datasets.video_datasets import build_dataset
 from datasets.kinetics import build_training_dataset
+import logging
+from datetime import datetime
+import time
+from tqdm import tqdm
 
 # assert timm.__version__ == "0.3.2" # version check
 import util.misc as misc
@@ -105,8 +108,6 @@ class LabelSmoothLoss(torch.nn.Module):
 
 
 def main(args):
-  if args.log_dir is None:
-    args.log_dir = args.output_dir
   misc.init_distributed_mode(args)
   print('here')
 
@@ -168,7 +169,7 @@ def main(args):
 
   if global_rank == 0 and args.log_dir is not None and not args.eval:
     os.makedirs(args.log_dir, exist_ok=True)
-    log_writer = SummaryWriter(log_dir=args.log_dir)
+    log_writer = SummaryWriter(log_dir=f"{args.log_dir}/tensorboard")
   else:
     log_writer = None
 
@@ -291,7 +292,7 @@ def main(args):
   start_time = time.time()
   max_accuracy = 0.0
 
-  for epoch in range(args.start_epoch, args.epochs):
+  for epoch in tqdm(range(args.start_epoch, args.epochs), ncols=80):
     if args.distributed:
       data_loader_train.sampler.set_epoch(epoch)
     train_stats = train_one_epoch(
@@ -349,6 +350,14 @@ def main(args):
 if __name__ == '__main__':
   args = get_args_parser()
   args = args.parse_args()
-  if args.output_dir:
-    Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+  Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+  Path(f"{args.log_dir}/logs").mkdir(parents=True, exist_ok=True)
+  Path(f"{args.log_dir}/tensorboard").mkdir(parents=True, exist_ok=True)
+
+  now = datetime.now()
+  logging.basicConfig(
+      filename=f"{args.log_dir}/logs/{now.isoformat()}.log",
+      level=logging.DEBUG if args.verbose else logging.INFO,
+      encoding="utf-8",
+      format='[%(levelname)s:%(name)s] %(message)s',)
   main(args)

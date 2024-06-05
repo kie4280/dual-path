@@ -48,10 +48,9 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
     optimizer.zero_grad()
 
-    if log_writer is not None:
-        print('log_dir: {}'.format(log_writer.log_dir))
     for data_iter_step, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         samples, targets = batch[0], batch[1]
+        print(targets[0])
         batch_size = samples.shape[0]
         in_channels = samples.shape[1]
         frame_size = samples.shape[3]
