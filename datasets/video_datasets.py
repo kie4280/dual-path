@@ -1,60 +1,7 @@
 import os
 from datasets.video_transforms import *
-from datasets.kinetics import VideoClsDataset, VideoMAE
-
-
-class DataAugmentationForVideoMAE(object):
-  def __init__(self, args):
-    self.input_mean = [0.485, 0.456, 0.406]  # IMAGENET_DEFAULT_MEAN
-    self.input_std = [0.229, 0.224, 0.225]  # IMAGENET_DEFAULT_STD
-    normalize = GroupNormalize(self.input_mean, self.input_std)
-    self.train_augmentation = GroupMultiScaleCrop(
-        args.input_size, [1, .875, .75, .66])
-    self.transform = transforms.Compose([
-        self.train_augmentation,
-        Stack(roll=False),
-        ToTorchFormatTensor(div=True),
-        normalize,
-    ])
-    if args.linprob:
-      self.masked_position_generator = None
-    elif args.mask_type == 'tube':
-      self.masked_position_generator = TubeMaskingGenerator(
-          args.window_size, args.mask_ratio
-      )
-
-  def __call__(self, images):
-    process_data, _ = self.transform(images)
-    if self.masked_position_generator is None:
-      return process_data
-    return process_data, self.masked_position_generator()
-
-  def __repr__(self):
-    repr = "(DataAugmentationForVideoMAE,\n"
-    repr += "  transform = %s,\n" % str(self.transform)
-    repr += "  Masked position generator = %s,\n" % str(
-        self.masked_position_generator)
-    repr += ")"
-    return repr
-
-
-def build_pretraining_dataset(args):
-  transform = DataAugmentationForVideoMAE(args)
-  dataset = VideoMAE(
-      root=None,
-      setting=args.data_path,
-      video_ext='mp4',
-      is_color=True,
-      modality='rgb',
-      new_length=args.num_frames,
-      new_step=args.sampling_rate,
-      transform=transform,
-      temporal_jitter=True,
-      video_loader=True,
-      use_decord=True,
-      lazy_init=False)
-  print("Data Aug = %s" % str(transform))
-  return dataset
+from datasets.kinetics import VideoClsDataset
+from torchvision.datasets import Kinetics
 
 
 def build_dataset(is_train, test_mode, args):
@@ -87,6 +34,15 @@ def build_dataset(is_train, test_mode, args):
         new_height=256,
         new_width=320,
         args=args)
+
+    # dataset = Kinetics(root=args.data_path,
+    #                    download=(not os.path.exists(args.data_path)),
+    #                    num_classes="400",
+    #                    split=mode,
+    #                    frames_per_clip=args.num_frames,
+    #                    frame_rate=args.sampling_rate,
+    #                    num_workers=args.num_workers,)
+
     nb_classes = 400
 
   elif args.data_set == 'SSV2':

@@ -42,7 +42,6 @@ from util.argument_parser import get_args_parser
 
 from engine_finetune_clip import train_one_epoch, evaluate
 from engine_finetune_clip import merge, final_test
-import clip.model
 from CLIP_custom.clip import clip as clip
 
 
@@ -292,7 +291,7 @@ def main(args):
   start_time = time.time()
   max_accuracy = 0.0
 
-  for epoch in tqdm(range(args.start_epoch, args.epochs), ncols=80):
+  for epoch in range(args.start_epoch, args.epochs):
     if args.distributed:
       data_loader_train.sampler.set_epoch(epoch)
     train_stats = train_one_epoch(
@@ -326,11 +325,12 @@ def main(args):
       if log_writer is not None:
         log_writer.flush()
       with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-        f.write(json.dumps(log_stats) + "\n")
-
+        f.write(json.dumps(log_stats) + "\n") 
+  
   preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
   test_stats = final_test(data_loader_test, model, device, preds_file, args)
   torch.distributed.barrier()
+
   if global_rank == 0:
     print("Start merging results...")
     final_top1, final_top5 = merge(

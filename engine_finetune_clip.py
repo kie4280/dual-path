@@ -27,6 +27,7 @@ from torchvision import transforms
 import cv2
 from PIL import Image
 import torch.nn as nn
+from tqdm import tqdm
 
 
 def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
@@ -48,16 +49,16 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
 
     optimizer.zero_grad()
 
-    for data_iter_step, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    # for data_iter_step, batch in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, batch in tqdm(enumerate(data_loader), ncols=120):
         samples, targets = batch[0], batch[1]
-        print(targets[0])
         batch_size = samples.shape[0]
         in_channels = samples.shape[1]
         frame_size = samples.shape[3]
         block_width = 4
         num_temporal_frame = int(num_frames / (block_width ** 2))
         spatial_stride = int(num_frames / 8)
-        resize = transforms.Resize((frame_size, frame_size))
+        resize = transforms.Resize((frame_size, frame_size), antialias=True)
         samples_t = samples
         samples_s = samples[:, :, 0::spatial_stride, :, :]
 
@@ -70,7 +71,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         samples = torch.cat([samples_t, samples_s], dim=2)
 
         samples = samples.to(device, non_blocking=True)
-        targets = targets.to(device, non_blocking=True)
+        # targets = targets.to(device, non_blocking=True)
 
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)

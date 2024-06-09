@@ -59,6 +59,14 @@ class VideoClsDataset(Dataset):
     cleaned = pd.read_csv(self.anno_path, header=None, delimiter=',')
     self.dataset_samples = list(cleaned.values[:, 1])
     self.label_array = list(cleaned.values[:, 0])
+    self.label_transform = dict()
+    idx = 0
+    for label in self.label_array:
+      if label not in self.label_transform:
+        self.label_transform[label] = idx
+        idx += 1
+    print(self.label_transform)
+    assert idx == args.nb_classes
 
     if (mode == 'train'):
       if args.linprob:
@@ -150,7 +158,9 @@ class VideoClsDataset(Dataset):
           buffer = process_data.view(
               (-1, 3) + process_data.size()[-2:]).transpose(0, 1)
 
-      return buffer, self.label_array[index], index, {}
+      label = self.label_transform[self.label_array[index]]
+      label = torch.tensor(label, dtype=torch.long)
+      return buffer, label, index, {}
 
     elif self.mode == 'val':
       sample = self.dataset_samples[index]
@@ -166,7 +176,9 @@ class VideoClsDataset(Dataset):
           sample = os.path.join(self.data_path, self.mode, f"{sample}.mp4")
           buffer = self.loadvideo_decord(sample)
       buffer = self.data_transform(buffer)
-      return buffer, self.label_array[index], sample.split(
+      label = self.label_transform[self.label_array[index]]
+      label = torch.tensor(label, dtype=torch.long)
+      return buffer, label, sample.split(
           "/")[-1].split(".")[0]
 
     elif self.mode == 'test':
@@ -207,7 +219,9 @@ class VideoClsDataset(Dataset):
       # print(buffer.shape)
 
       buffer = self.data_transform(buffer)
-      return buffer, self.test_label_array[index], sample.split("/")[-1].split(".")[0], \
+      label = self.label_transform[self.test_label_array[index]]
+      label = torch.tensor(label, dtype=torch.long)
+      return buffer, label, sample.split("/")[-1].split(".")[0], \
           chunk_nb, split_nb
     else:
       raise NameError('mode {} unkown'.format(self.mode))

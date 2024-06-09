@@ -35,7 +35,7 @@ class TemporalPositionalEmbedding(nn.Module):
           width,
           width)
       temp = temp.permute(0, 1, 3, 2, 4).reshape(batch_size, 16, 16)
-      resize = transforms.Resize((resize_shape, resize_shape))
+      resize = transforms.Resize((resize_shape, resize_shape), antialias=True)
       temp = resize(temp)
       emb = temp.view(batch_size, -1)[0]
       emb = torch.cat([torch.tensor([0.0]).view(1).to(tensor.device), emb])
@@ -64,7 +64,7 @@ class TemporalPositionalEmbedding(nn.Module):
           width,
           width)
       temp = temp.permute(0, 1, 2, 4, 3, 5).reshape(batch_size, Tt, 16, 16)
-      resize = transforms.Resize((resize_shape, resize_shape))
+      resize = transforms.Resize((resize_shape, resize_shape), antialias=True)
       temp = resize(temp)  # [B, Tt, root(N), root(N)]
       emb = temp.view(batch_size, Tt, -1)[0]  # [B, Tt, N]
       emb = torch.cat(
@@ -482,20 +482,21 @@ class VisionTransformer(nn.Module):
     self.num_classes = num_class
     if adapter == 'w-adapter':
       self.head = nn.Sequential(OrderedDict([
-          ('linear1', nn.Linear(output_dim * 2, output_dim)),
+          ('linear1', nn.Linear(output_dim * 3, output_dim)),
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
+          # nn.Softmax(dim=-1) # added myself
       ]))
-      # nn.Linear(output_dim * 2, num_classes) if num_classes > 0 else nn.Identity()
+
     else:
       self.head = nn.Sequential(OrderedDict([
-          ('linear1', nn.Linear(output_dim * 2, output_dim)),
+          ('linear1', nn.Linear(output_dim * 3, output_dim)),
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
+          # nn.Softmax(dim=-1) # added myself
       ]))
-    # trunc_normal_(self.head.weight, std=.02)
 
     self.adapter = adapter
     self.num_frames = num_frame
@@ -508,37 +509,24 @@ class VisionTransformer(nn.Module):
     x = self.conv1(x)  # shape = [*, width, grid, grid]
     x = x.reshape(x.shape[0], x.shape[1], -1)  # shape = [*, width, grid ** 2]
     x = x.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-    x = torch.cat([self.class_embedding.to(x.dtype) + torch.zeros(x.shape[0],
-                                                                  1,
-                                                                  x.shape[-1],
-                                                                  dtype=x.dtype,
-                                                                  device=x.device),
-                   x],
-                  dim=1)  # shape = [*, grid ** 2 + 1, width]
+    # shape = [*, grid ** 2 + 1, width]
+    x = torch.cat([self.class_embedding.to(x.dtype) +
+                   torch.zeros(x.shape[0], 1, x.shape[-1], dtype=x.dtype, device=x.device), x], dim=1)
+
     if self.adapter == 'w-adapter':
       GB, N, D = x.shape
-      Ts = 8
-      Tt = int(self.num_frames - 8)
+      Ts = 8  # number of frames for spatial path
+      Tt = int(self.num_frames - 8)  # number of frames for temporal path
       x = x.reshape(int(GB / self.num_frames), self.num_frames, N, D)
       x[:, 0:Tt, :, :] = x[:, 0:Tt, :, :] + self.temporal_positional_embedding(
           x[:, 0:Tt, :, :]) + self.spatial_positional_embedding.expand(int(GB / self.num_frames), Tt, -1, -1)
-      x[:,
-        Tt:,
-        :,
-        :] = (x[:,
-                Tt:,
-                :,
-                :].reshape(-1,
-                           N,
-                           D) + self.positional_embedding.to(x.dtype)).reshape(int(GB / self.num_frames),
-                                                                               8,
-                                                                               N,
-                                                                               D)
+      x[:, Tt:, :, :] = (x[:, Tt:, :, :].reshape(-1, N, D) + self.positional_embedding.to(x.dtype))\
+          .reshape(int(GB / self.num_frames), 8, N, D)
       x = x.reshape(-1, N, D)
     else:
       x = x + self.positional_embedding.to(x.dtype)
-    x = self.ln_pre(x)
 
+    x = self.ln_pre(x)
     x = x.permute(1, 0, 2)  # NLD -> LND
     x = self.transformer(x)
     x = x.permute(1, 0, 2)  # LND -> NLD    [B*T, N+1, D]
@@ -546,8 +534,8 @@ class VisionTransformer(nn.Module):
     x_temp = x[:, 1:, :]    # [B*T, N, D]
     x = self.ln_post(x[:, 0, :])    # [B*T, 1, D]
 
-    if self.proj is not None:
-      x = x @ self.proj
+    # if self.proj is not None:
+    #   x = x @ self.proj
 
     if self.adapter == 'w-adapter':
       x = x.reshape(-1, Ts + Tt, x.shape[-1])
@@ -556,10 +544,10 @@ class VisionTransformer(nn.Module):
                               Ts + Tt,
                               x_temp.shape[1],
                               x_temp.shape[-1])  # [B, T, N, D]
-      # [B * Tt, N, D]
       x_temp = x_temp[:, 0:Tt, :,
-                      :].reshape(-1, x_temp.shape[2], x_temp.shape[-1])
-      cls_t = x[:, 0:Tt, :].reshape(-1, 1, cls_t.shape[-1])   # [B * Tt, D]
+                      :].reshape(-1, x_temp.shape[2], x_temp.shape[-1])  # [B * Tt, N, D]
+      cls_t = x[:, 0:Tt, :].reshape(-1, 1, x_temp.shape[-1])   # [B * Tt, D]
+
       attn_t = torch.bmm(x_temp, cls_t.permute(
           0, 2, 1)).reshape(-1, Tt, x_temp.shape[1])  # [B * Tt, N]
       attn_t = attn_t.reshape(-1,
