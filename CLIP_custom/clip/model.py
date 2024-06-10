@@ -486,7 +486,6 @@ class VisionTransformer(nn.Module):
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
-          # nn.Softmax(dim=-1) # added myself
       ]))
 
     else:
@@ -495,7 +494,6 @@ class VisionTransformer(nn.Module):
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
-          # nn.Softmax(dim=-1) # added myself
       ]))
 
     self.adapter = adapter

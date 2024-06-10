@@ -23,6 +23,7 @@ import logging
 
 _logger = logging.getLogger("dataloaders")
 
+
 class VideoClsDataset(Dataset):
   """Load your own video classification dataset."""
 
@@ -57,16 +58,19 @@ class VideoClsDataset(Dataset):
 
     import pandas as pd
     cleaned = pd.read_csv(self.anno_path, header=None, delimiter=',')
-    self.dataset_samples = list(cleaned.values[:, 1])
-    self.label_array = list(cleaned.values[:, 0])
+    self.dataset_samples = list(cleaned.values[1:, 1])
+    self.label_array = list(cleaned.values[1:, 0])
+    labels_csv = pd.read_csv(
+        os.path.join(
+            args.data_path,
+            "annotations", "kinetics_400_labels.csv"),
+        header=None,
+        delimiter=",")
     self.label_transform = dict()
-    idx = 0
-    for label in self.label_array:
-      if label not in self.label_transform:
-        self.label_transform[label] = idx
-        idx += 1
-    print(self.label_transform)
-    assert idx == args.nb_classes
+
+    for i in range(1, len(labels_csv)):
+      self.label_transform[labels_csv.values[i][1]] = int(labels_csv.values[i][0])
+    assert len(self.label_transform) == args.nb_classes
 
     if (mode == 'train'):
       if args.linprob:

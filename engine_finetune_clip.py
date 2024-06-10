@@ -71,7 +71,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         samples = torch.cat([samples_t, samples_s], dim=2)
 
         samples = samples.to(device, non_blocking=True)
-        # targets = targets.to(device, non_blocking=True)
+        targets = targets.to(device, non_blocking=True)
 
         if data_iter_step % accum_iter == 0:
             lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
@@ -94,6 +94,7 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
             else:
                 output = model.encode_image(samples)
             output = output.squeeze()
+            targets = nn.functional.one_hot(targets, num_classes=output.shape[1]).to(torch.float32)
             loss = criterion(output, targets)
 
         loss_value = loss.item()
@@ -184,6 +185,7 @@ def evaluate(data_loader, model, device):
             else:
                 output = model.encode_image(images)
             output = output.squeeze()
+            target = nn.functional.one_hot(target, num_classes=output.shape[1]).to(torch.float32)
             loss = criterion(output, target)
 
         acc1, acc5 = accuracy(output, target, topk=(1, 5))

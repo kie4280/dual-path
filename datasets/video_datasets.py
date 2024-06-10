@@ -13,10 +13,10 @@ def build_dataset(is_train, test_mode, args):
       anno_path = os.path.join(args.data_path, "annotations", 'train.csv')
     elif test_mode == True:
       mode = 'test'
-      anno_path = os.path.join(args.data_path, "annotations", 'train.csv')
+      anno_path = os.path.join(args.data_path, "annotations", 'test.csv')
     else:
       mode = 'validation'
-      anno_path = os.path.join(args.data_path, "annotations", 'train.csv')
+      anno_path = os.path.join(args.data_path, "annotations", 'val.csv')
 
     dataset = VideoClsDataset(
         anno_path=anno_path,
