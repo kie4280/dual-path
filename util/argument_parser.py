@@ -1,8 +1,12 @@
-import argparse
+from argparse import ArgumentParser, Namespace
+
+
+def to_dict(args: Namespace) -> dict:
+  return vars(args)
 
 
 def get_args_parser():
-  parser = argparse.ArgumentParser(
+  parser = ArgumentParser(
       'AdaptFormer fine-tuning for action recognition',
       add_help=False)
   parser.add_argument('--batch_size', default=128, type=int,
@@ -159,5 +163,6 @@ def get_args_parser():
       help='full finetune model')
   parser.add_argument('--inception', default=False, action='store_true', help='whether use INCPETION mean and std'
                                                                               '(for Jx provided IN-21K pretrain')
+  parser.add_argument("--wandb", action="store_true", help="use wandb to log training")
 
   return parser

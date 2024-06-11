@@ -19,19 +19,17 @@ import numpy as np
 import os
 import time
 from pathlib import Path
-from collections import OrderedDict
-from easydict import EasyDict
 import torch
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
 import torch.nn.functional as F
+import torch.utils
 from torch.utils.tensorboard import SummaryWriter
 from datasets.video_datasets import build_dataset
-from datasets.kinetics import build_training_dataset
 import logging
 from datetime import datetime
 import time
-from tqdm import tqdm
+import wandb
 
 # assert timm.__version__ == "0.3.2" # version check
 import util.misc as misc
@@ -43,6 +41,7 @@ from util.argument_parser import get_args_parser
 from engine_finetune_clip import train_one_epoch, evaluate
 from engine_finetune_clip import merge, final_test
 from CLIP_custom.clip import clip as clip
+from util.wandb import new_logger
 
 
 def convert_weights(model: nn.Module):
@@ -107,9 +106,9 @@ class LabelSmoothLoss(torch.nn.Module):
 
 
 def main(args):
+  if args.wandb:
+    new_logger(args)
   misc.init_distributed_mode(args)
-  print('here')
-
   print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
   print("{}".format(args).replace(', ', ',\n'))
 
@@ -145,32 +144,29 @@ def main(args):
   dataset_val, _ = build_dataset(is_train=False, test_mode=False, args=args)
   dataset_test, _ = build_dataset(is_train=False, test_mode=True, args=args)
 
-  if True:  # args.distributed:
+  num_tasks = misc.get_world_size()
+  global_rank = misc.get_rank()
+  if args.distributed:
     print("Distributed On!!!!!!!!!!!")
-    num_tasks = misc.get_world_size()
-    global_rank = misc.get_rank()
     sampler_train = torch.utils.data.DistributedSampler(
         dataset_train, num_replicas=num_tasks, rank=global_rank, shuffle=True
     )
     print("Sampler_train = %s" % str(sampler_train))
-    if args.dist_eval:
-      if len(dataset_val) % num_tasks != 0:
-        print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
-              'This will slightly alter validation results as extra duplicate entries are added to achieve '
-              'equal num of samples per-process.')
-      sampler_val = torch.utils.data.DistributedSampler(
-          dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=True)  # shuffle=True to reduce monitor bias
-      sampler_test = torch.utils.data.DistributedSampler(
-          dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=False)
-    else:
-      sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-      sampler_test = torch.utils.data.SequentialSampler(dataset_test)
-
-  if global_rank == 0 and args.log_dir is not None and not args.eval:
-    os.makedirs(args.log_dir, exist_ok=True)
-    log_writer = SummaryWriter(log_dir=f"{args.log_dir}/tensorboard")
   else:
-    log_writer = None
+    sampler_train = torch.utils.data.SequentialSampler(dataset_train)
+
+  if args.dist_eval:
+    if len(dataset_val) % num_tasks != 0:
+      print('Warning: Enabling distributed evaluation with an eval dataset not divisible by process number. '
+            'This will slightly alter validation results as extra duplicate entries are added to achieve '
+            'equal num of samples per-process.')
+    sampler_val = torch.utils.data.DistributedSampler(
+        dataset_val, num_replicas=num_tasks, rank=global_rank, shuffle=True)  # shuffle=True to reduce monitor bias
+    sampler_test = torch.utils.data.DistributedSampler(
+        dataset_test, num_replicas=num_tasks, rank=global_rank, shuffle=False)
+  else:
+    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
+    sampler_test = torch.utils.data.SequentialSampler(dataset_test)
 
   data_loader_train = torch.utils.data.DataLoader(
       dataset_train, sampler=sampler_train,
@@ -194,22 +190,6 @@ def main(args):
       num_workers=args.num_workers,
       pin_memory=args.pin_mem,
       drop_last=False
-  )
-
-  # fine-tuning configs
-  tuning_config = EasyDict(
-      # AdaptFormer
-      ffn_adapt=args.ffn_adapt,
-      ffn_option="parallel",
-      ffn_adapter_layernorm_option="none",
-      ffn_adapter_init_option="lora",
-      ffn_adapter_scalar="0.1",
-      ffn_num=args.ffn_num,
-      d_model=768,
-      # VPT related
-      vpt_on=args.vpt,
-      vpt_num=args.vpt_num,
-      protune=args.protune,
   )
 
   num_frame = int(args.num_frames / 16) + 8
@@ -286,6 +266,7 @@ def main(args):
         with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
           f.write(json.dumps(log_stats) + "\n")
     exit(0)
+    # ---------------if in eval mode then exit-------------------
 
   print(f"Start training for {args.epochs} epochs")
   start_time = time.time()
@@ -295,10 +276,8 @@ def main(args):
     if args.distributed:
       data_loader_train.sampler.set_epoch(epoch)
     train_stats = train_one_epoch(
-        model, criterion, data_loader_train, optimizer, device, epoch, loss_scaler,
-        max_norm=None,
-        log_writer=log_writer,
-        args=args
+        args, model, criterion, data_loader_train, optimizer, device,
+        epoch, loss_scaler, max_norm=None,
     )
     if args.output_dir:
       misc.save_model(
@@ -311,22 +290,19 @@ def main(args):
     max_accuracy = max(max_accuracy, test_stats["acc1"])
     print(f'Max accuracy: {max_accuracy:.2f}%')
 
-    if log_writer is not None:
-      log_writer.add_scalar('perf/test_acc1', test_stats['acc1'], epoch)
-      log_writer.add_scalar('perf/test_acc5', test_stats['acc5'], epoch)
-      log_writer.add_scalar('perf/test_loss', test_stats['loss'], epoch)
+    if args.wandb and global_rank == 0 and args.log_dir is not None:
+      stats_metric = {
+        "eval/test_acc1": test_stats['acc1'],
+        "eval/test_acc5": test_stats['acc5'],
+        "eval/test_loss": test_stats['loss'],
+      }
+      wandb.log(stats_metric)
 
     log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                  **{f'test_{k}': v for k, v in test_stats.items()},
                  'epoch': epoch,
                  'n_parameters': n_parameters}
 
-    if args.output_dir and misc.is_main_process():
-      if log_writer is not None:
-        log_writer.flush()
-      with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
-        f.write(json.dumps(log_stats) + "\n") 
-  
   preds_file = os.path.join(args.output_dir, str(global_rank) + '.txt')
   test_stats = final_test(data_loader_test, model, device, preds_file, args)
   torch.distributed.barrier()
