@@ -19,7 +19,7 @@ def get_args_parser():
   parser.add_argument('--model', default='vit_base_patch16', type=str, metavar='MODEL',
                       help='Name of model to train')
   # Optimizer parameters
-  parser.add_argument('--weight_decay', type=float, default=5e-2,
+  parser.add_argument('--weight_decay', type=float, default=5e-3,
                       help='weight decay (default: 0 for linear probe following MoCo v1)')
   parser.add_argument('--lr', type=float, default=None, metavar='LR',
                       help='learning rate (absolute lr)')
