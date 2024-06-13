@@ -29,9 +29,12 @@ import torch.nn as nn
 from tqdm import tqdm
 from argparse import Namespace
 import wandb
+import logging
+
+_logger = logging.getLogger("trainer")
 
 
-def train_one_epoch(args:Namespace, model: torch.nn.Module, criterion: torch.nn.Module,
+def train_one_epoch(args: Namespace, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, loss_scaler, max_norm: float = 0,
                     mixup_fn: Optional[Mixup] = None):
@@ -48,14 +51,16 @@ def train_one_epoch(args:Namespace, model: torch.nn.Module, criterion: torch.nn.
     print_freq = 100
 
   accum_iter = args.accum_iter
+  total_steps = len(data_loader)
 
   optimizer.zero_grad()
 
   # for data_iter_step, batch in
   # enumerate(metric_logger.log_every(data_loader, print_freq, header)):
-  data_count = len(data_loader)
   for data_iter_step, batch in tqdm(
-          enumerate(data_loader), total=data_count, ncols=80):
+          enumerate(data_loader), total=total_steps,
+          ncols=80, postfix={"epoch": epoch}):
+
     samples, targets = batch[0], batch[1]
     batch_size = samples.shape[0]
     in_channels = samples.shape[1]
@@ -129,7 +134,10 @@ def train_one_epoch(args:Namespace, model: torch.nn.Module, criterion: torch.nn.
 
     if not math.isfinite(loss_value):
       print("Loss is {}, stopping training".format(loss_value))
+      _logger.info("Loss is {}, stopping training".format(loss_value))
+      _logger.info("output is {} \ntarget is: {}".format(output, targets))
       sys.exit(1)
+
     loss /= accum_iter
     loss_scaler(loss, optimizer, clip_grad=max_norm,
                 parameters=model.parameters(), create_graph=False,
@@ -149,16 +157,13 @@ def train_one_epoch(args:Namespace, model: torch.nn.Module, criterion: torch.nn.
     metric_logger.update(lr=max_lr)
 
     loss_value_reduce = misc.all_reduce_mean(loss_value)
-    if args.wandb and (data_iter_step + 1) % accum_iter == 0:
-      """ We use epoch_1000x as the x-axis in tensorboard.
-      This calibrates different curves when batch size changes.
-      """
-      epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
+
+    if args.wandb and (data_iter_step + 1) % int(args.log_interval) == 0:
       stats_metric = {
-        "train/loss": loss_value_reduce,
-        "train/lr": max_lr
+          "train/loss": loss_value_reduce,
+          "train/lr": max_lr
       }
-      wandb.log(stats_metric, step=epoch_1000x, commit=True)
+      wandb.log(stats_metric, commit=True)
 
   # gather the stats from all processes
   metric_logger.synchronize_between_processes()

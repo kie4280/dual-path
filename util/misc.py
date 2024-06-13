@@ -249,6 +249,8 @@ def init_distributed_mode(args):
 
 
 class NativeScalerWithGradNormCount:
+    # [kie4280] This function is checked. It simply scale the loss 
+    # using mixed precisoin
     state_dict_key = "amp_scaler"
 
     def __init__(self):

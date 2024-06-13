@@ -41,7 +41,7 @@ from util.argument_parser import get_args_parser
 from engine_finetune_clip import train_one_epoch, evaluate
 from engine_finetune_clip import merge, final_test
 from CLIP_custom.clip import clip as clip
-from util.wandb import new_logger
+from util.wandb import wandb_init
 
 
 def convert_weights(model: nn.Module):
@@ -107,7 +107,7 @@ class LabelSmoothLoss(torch.nn.Module):
 
 def main(args):
   if args.wandb:
-    new_logger(args)
+    wandb_init(args)
   misc.init_distributed_mode(args)
   print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
   print("{}".format(args).replace(', ', ',\n'))
@@ -265,8 +265,9 @@ def main(args):
       if args.output_dir and misc.is_main_process():
         with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
           f.write(json.dumps(log_stats) + "\n")
-    exit(0)
+
     # ---------------if in eval mode then exit-------------------
+    exit(0)
 
   print(f"Start training for {args.epochs} epochs")
   start_time = time.time()

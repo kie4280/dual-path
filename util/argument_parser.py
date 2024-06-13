@@ -48,6 +48,7 @@ def get_args_parser():
                       help='path where to save, empty for no saving')
   parser.add_argument('--log_dir', default="./output_dir",
                       help='path where to tensorboard log')
+  parser.add_argument("--log_interval", type=int, default=20, help="log every N steps")
   parser.add_argument('--device', default='cuda',
                       help='device to use for training / testing')
   parser.add_argument('--seed', default=0, type=int)
@@ -163,6 +164,15 @@ def get_args_parser():
       help='full finetune model')
   parser.add_argument('--inception', default=False, action='store_true', help='whether use INCPETION mean and std'
                                                                               '(for Jx provided IN-21K pretrain')
-  parser.add_argument("--wandb", action="store_true", help="use wandb to log training")
+
+  # arguments for wandb logging
+  parser.add_argument(
+      "--wandb",
+      action="store_true",
+      help="use wandb to log training")
+  parser.add_argument("--note", type=str, default=None,
+                      help="additional notes for this run")
+  parser.add_argument("--tags", type=str, default=None,
+                      help="tags for this run")
 
   return parser
