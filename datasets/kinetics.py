@@ -69,7 +69,8 @@ class VideoClsDataset(Dataset):
     self.label_transform = dict()
 
     for i in range(1, len(labels_csv)):
-      self.label_transform[labels_csv.values[i][1]] = int(labels_csv.values[i][0])
+      self.label_transform[labels_csv.values[i]
+                           [1]] = int(labels_csv.values[i][0])
     assert len(self.label_transform) == args.nb_classes
 
     if (mode == 'train'):
@@ -436,7 +437,7 @@ def spatial_sampling(
   return frames
 
 
-def tensor_normalize(tensor, mean, std):
+def tensor_normalize(tensor: torch.Tensor, mean, std):
   """
   Normalize a given tensor by subtracting the mean and dividing the std.
   Args:

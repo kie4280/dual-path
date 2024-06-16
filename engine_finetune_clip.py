@@ -99,14 +99,12 @@ def train_one_epoch(args: Namespace, model: torch.nn.Module, criterion: torch.nn
 
     samples = samples.to(device, non_blocking=True)
     targets = targets.to(device, non_blocking=True)
+    if samples.isnan().any():
+      _logger.info("nan in samples", samples.cpu().numpy())
 
     if data_iter_step % accum_iter == 0:
       lr_sched.adjust_learning_rate(
-          optimizer,
-          data_iter_step /
-          len(data_loader) +
-          epoch,
-          args)
+          optimizer, data_iter_step / total_steps + epoch, args)
 
     if samples.shape[2] != 1:
       samples = samples.permute(0, 2, 1, 3, 4)    # B x Ts+Tt x C x W x H

@@ -415,15 +415,14 @@ class Transformer(nn.Module):
     self.layers = layers
     self.adapter = adapter
     self.num_frames = num_frames
-    self.resblocks = nn.Sequential(
-        *
-        [
-            ResidualAttentionBlock(
-                width,
-                heads,
-                num_frames,
-                attn_mask,
-                adapter=adapter) for _ in range(layers)])
+    res_blocks = [
+        ResidualAttentionBlock(
+            width,
+            heads,
+            num_frames,
+            attn_mask,
+            adapter=adapter) for _ in range(layers)]
+    self.resblocks = nn.Sequential(*res_blocks)
 
   def forward(self, x: torch.Tensor):
     return self.resblocks(x)
@@ -486,6 +485,7 @@ class VisionTransformer(nn.Module):
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
+          ('softmax', nn.Softmax(dim=-1))
       ]))
 
     else:
@@ -494,6 +494,7 @@ class VisionTransformer(nn.Module):
           ('gelu', nn.GELU()),
           ('linear2', nn.Linear(output_dim, self.num_classes)
            if self.num_classes > 0 else nn.Identity()),
+          ('softmax', nn.Softmax(dim=-1))
       ]))
 
     self.adapter = adapter
@@ -688,6 +689,8 @@ class CLIP(nn.Module):
     return x
 
   def forward(self, image, text):
+    raise RuntimeError("This part of code shouldn't have run")
+
     image_features = self.encode_image(image)
     text_features = self.encode_text(text)
 
